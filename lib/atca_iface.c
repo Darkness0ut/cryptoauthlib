@@ -25,7 +25,7 @@
  * THE AMOUNT OF FEES, IF ANY, THAT YOU HAVE PAID DIRECTLY TO MICROCHIP FOR
  * THIS SOFTWARE.
  */
-
+#include <stdlib.h>
 #include "cryptoauthlib.h"
 
 /** \defgroup interface ATCAIface (atca_)
@@ -143,6 +143,29 @@ ATCA_STATUS atinit(ATCAIface ca_iface)
  */
 ATCA_STATUS atsend(ATCAIface ca_iface, uint8_t address, uint8_t *txdata, int txlength)
 {
+    char senddata[1024] = {0};
+    char* p = senddata;
+    char *env = getenv("CRYPTOAUTHLIB_AT_DEBUG");
+
+    if (env == NULL)
+    {
+    }
+    else if (strlen(env)>0)
+    {
+        for(int i=0; i<txlength; i++)
+        {
+            sprintf(p, "%02X ", txdata[i]); p+=3;
+            if (i%16==15 && i<txlength)
+            {
+                sprintf(p, "\n"); p++;
+                sprintf(p, "%34s", "+"); p+=34;
+            }
+        }
+        *(p-1) = 0;
+        fprintf(stdout, "++> ATSend %3d bytes -> addr:%3d [%s]\n", txlength, address, senddata);
+        p = NULL;
+    }
+
     if (!ca_iface)
     {
         return ATCA_BAD_PARAM;
@@ -176,6 +199,11 @@ ATCA_STATUS atsend(ATCAIface ca_iface, uint8_t address, uint8_t *txdata, int txl
  */
 ATCA_STATUS atreceive(ATCAIface ca_iface, uint8_t word_address, uint8_t *rxdata, uint16_t *rxlength)
 {
+    ATCA_STATUS status;
+    char recvdata[1024] = {0};
+    char *p = recvdata;
+    char *env = getenv("CRYPTOAUTHLIB_AT_DEBUG");
+
     if (!ca_iface)
     {
         return ATCA_BAD_PARAM;
@@ -183,7 +211,21 @@ ATCA_STATUS atreceive(ATCAIface ca_iface, uint8_t word_address, uint8_t *rxdata,
 
     if (ca_iface->hal && ca_iface->hal->halreceive)
     {
-        return ca_iface->hal->halreceive(ca_iface, word_address, rxdata, rxlength);
+        status = ca_iface->hal->halreceive(ca_iface, word_address, rxdata, rxlength);
+        if (env==NULL || strlen(env)==0) return status;
+        for(int i=0; i<*rxlength; i++)
+        {
+            sprintf(p, "%02X ", rxdata[i]); p+=3;
+            if (i%16==15 && i<*rxlength)
+            {
+                sprintf(p, "\n"); p++;
+                sprintf(p, "%34s", "+"); p+=34;
+            }
+        }
+        *(p-1) = 0;
+        p = NULL;
+        fprintf(stdout, "<-- ATRecv %3d bytes <- addr:%3d [%s]\n", *rxlength, word_address, recvdata);
+        return status;
     }
     else
     {
